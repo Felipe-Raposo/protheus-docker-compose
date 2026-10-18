@@ -156,6 +156,10 @@ O erro acontece mesmo com um INI mínimo. Os próximos passos são testar o RPO 
 | `feliperaposo/protheus-postgresql` | [protheus-docker-postgresql](https://github.com/Felipe-Raposo/protheus-docker-postgresql) |
 | `feliperaposo/protheus-compiler:24` | [protheus-docker-compiler](https://github.com/Felipe-Raposo/protheus-docker-compiler) |
 
+## Licença
+
+Este projeto está sob a [GNU General Public License v3.0](LICENSE).
+
 ## Mantenedor
 
 Felipe Raposo — [feliperaposo@gmail.com](mailto:feliperaposo@gmail.com)
