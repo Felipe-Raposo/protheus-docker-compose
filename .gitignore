@@ -1,0 +1,9 @@
+# Artefatos de SO
+.DS_Store
+**/.DS_Store
+
+# Projetos das imagens (cada um tem seu próprio repositório)
+protheus/
+
+# Dados dos containers (bind mounts)
+**/volume/

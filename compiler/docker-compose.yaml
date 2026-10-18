@@ -1,0 +1,20 @@
+services:
+    compiler:
+        image: docker.io/feliperaposo/protheus-compiler:24
+        platform: linux/amd64
+        container_name: protheus-compiler
+        volumes:
+            - ./volume/apo:/protheus12/apo
+            - ./volume/patches:/patches
+        ulimits:
+            # ulimits definido de acordo com documentação da TOTVS
+            # https://tdn.totvs.com/display/tec/Application+Server+-+ulimit+settings
+            core:
+                soft: -1
+                hard: -1
+            nofile:
+                soft: 65536
+                hard: 65536
+            stack:
+                soft: 1048576
+                hard: 1048576

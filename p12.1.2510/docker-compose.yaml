@@ -1,0 +1,140 @@
+services:
+    db:
+        image: docker.io/feliperaposo/protheus-postgresql:16
+        container_name: postgresql
+        ports:
+            - "5432:5432"
+        env_file:
+          - .env
+        volumes:
+            - ./volume/data/psql:/var/lib/postgresql/data
+        networks:
+            - protheus
+        restart: always
+        healthcheck:
+            # Só reporta "healthy" quando o banco do Protheus já foi reconciliado
+            # (usuario/banco criados). Assim, uma falha na reconciliacao em background
+            # deixa o container unhealthy e bloqueia os dependentes, em vez de subir
+            # o Postgres "saudavel" sem o banco do Protheus.
+            test: ["CMD-SHELL", "PGPASSWORD=\"$$POSTGRES_PASSWORD\" psql -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -tAc \"SELECT 1 FROM pg_database WHERE datname='$${PROTHEUS_DB:-protheus}'\" | grep -q 1"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 40s
+    license:
+        image: docker.io/feliperaposo/protheus-license:latest
+        container_name: license-server
+        platform: linux/amd64
+        ports:
+            - "8081:1234"
+        devices:
+            - "/dev/mem:/dev/mem"
+        cap_add:
+            - sys_rawio
+        ulimits:
+            core:
+                soft: -1
+                hard: -1
+            nofile:
+                soft: 65536
+                hard: 65536
+            stack:
+                soft: 1048576
+                hard: 1048576
+        networks:
+            - protheus
+        restart: always
+        healthcheck:
+            test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/5555"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 40s
+    dbaccess:
+        image: docker.io/feliperaposo/protheus-dbaccess:24
+        container_name: dbaccess
+        platform: linux/amd64
+        ports:
+          - "7890:7890"
+        env_file:
+          - .env
+        ulimits:
+            # ulimits definido de acordo com documentação da TOTVS
+            # https://tdn.totvs.com/display/tec/DBAccess+-+ulimit+settings
+            core:
+                soft: -1
+                hard: -1
+            nofile:
+                soft: 65535
+                hard: 65535
+            stack:
+                soft: 1048576
+                hard: 1048576
+        networks:
+            - protheus
+        restart: always
+        healthcheck:
+            test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/7890"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        depends_on:
+            db:
+                condition: service_healthy
+            license:
+                condition: service_healthy
+    protheus:
+        image: docker.io/feliperaposo/protheus:p12.1.2510
+        container_name: protheus
+        platform: linux/amd64
+        ports:
+            - "1234:1234"
+            - "8080:8080"
+            - "9995:9995"
+        environment:
+            - APPSERVER_DATABASE=POSTGRES
+        volumes:
+            - ./volume/data/system_temp:/protheus12/protheus_data/system_temp
+        devices:
+            - "/dev/mem:/dev/mem"
+        cap_add:
+            - sys_rawio
+        ulimits:
+            # ulimits definido de acordo com documentação da TOTVS
+            # https://tdn.totvs.com/display/tec/Application+Server+-+ulimit+settings
+            core:
+                soft: -1
+                hard: -1
+            nofile:
+                soft: 65536
+                hard: 65536
+            stack:
+                soft: 1048576
+                hard: 1048576
+        networks:
+            - protheus
+        restart: always
+        healthcheck:
+            # O WebApp responde na 1234 mesmo quando o MPP falha, e o AppServer cai ~20s
+            # depois. Por isso exige que o AppServer (lock recriado a cada start) esteja de
+            # pe ha pelo menos 60s, alem da resposta do WebApp.
+            test:
+                - CMD
+                - bash
+                - -c
+                - >-
+                  lck=/protheus12/bin/appserver/startstop_1234.lck;
+                  [ -f "$$lck" ] &&
+                  [ $$(( $$(date +%s) - $$(stat -c %Y "$$lck") )) -ge 60 ] &&
+                  curl -sf -o /dev/null -m 5 http://localhost:1234/webapp/
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            # O AppServer extrai o systemload antes de abrir a porta (~2,5 min no Colima).
+            start_period: 180s
+        depends_on:
+            dbaccess:
+                condition: service_healthy
+networks:
+    protheus:
