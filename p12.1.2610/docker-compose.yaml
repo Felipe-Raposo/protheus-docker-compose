@@ -19,7 +19,7 @@ services:
         volumes:
             # PG 18 usa PGDATA em /var/lib/postgresql/18/docker. Rodando com o UID do
             # host, o entrypoint oficial nao tenta chown, que falha no bind mount do Colima.
-            - ./volume/data/psql:/var/lib/postgresql
+            - ./volume/data/psql:/var/lib/postgresql:z
         networks:
             - protheus
         restart: always
@@ -102,18 +102,18 @@ services:
         image: docker.io/feliperaposo/protheus:p12.1.2610
         container_name: protheus
         platform: linux/amd64
-        # Por padrao o AppServer roda fora do Docker, direto na VM do Colima
-        # (make up). Este servico so sobe com "make up-container".
-        profiles: ["container"]
         ports:
             - "1234:1234"
+            # SmartClient TCP. A 1234 fica com o WebApp porque o multiprotocolo
+            # esta desligado no appserver.ini (o MPP derruba o AppServer 26.3).
+            - "1235:1235"
             - "8080:8080"
             - "9995:9995"
         environment:
             - APPSERVER_DATABASE=POSTGRES
         volumes:
-            # Dados temporarios do AppServer; bind mount em ./volume/data/system_temp.
             - ./volume/data/system_temp:/protheus12/protheus_data/system_temp
+            - ./appserver.ini:/protheus12/bin/appserver/appserver.ini
         devices:
             - "/dev/mem:/dev/mem"
         cap_add:
@@ -134,18 +134,17 @@ services:
             - protheus
         restart: always
         healthcheck:
-            # O WebApp responde na 1234 mesmo quando o MPP falha, e o AppServer cai ~20s
-            # depois. Por isso exige que o AppServer (lock recriado a cada start) esteja de
-            # pe ha pelo menos 60s, alem da resposta do WebApp.
+            # Sem MPP o WebApp responde em / na 1234. O lock leva o numero da porta TCP
+            # (1235) e so passa a contar depois que o processo permanece no ar.
             test:
                 - CMD
                 - bash
                 - -c
                 - >-
-                  lck=/protheus12/bin/appserver/startstop_1234.lck;
+                  lck=/protheus12/bin/appserver/startstop_1235.lck;
                   [ -f "$$lck" ] &&
                   [ $$(( $$(date +%s) - $$(stat -c %Y "$$lck") )) -ge 60 ] &&
-                  curl -sf -o /dev/null -m 5 http://localhost:1234/webapp/
+                  curl -sf -o /dev/null -m 5 http://localhost:1234/
             interval: 10s
             timeout: 5s
             retries: 5
