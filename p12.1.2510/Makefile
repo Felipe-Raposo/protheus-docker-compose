@@ -1,10 +1,13 @@
 export HOST_UID := $(shell id -u)
 export HOST_GID := $(shell id -g)
 
-.PHONY: up deps down restart logs ps status up-container down-container logs-container up-native down-native native-install native-uninstall
+.PHONY: up deps down restart logs status ps
 
 # PostgreSQL, license, dbAccess e AppServer no Docker.
+# mkdir antes do compose: se o diretorio nao existir, o daemon cria o bind
+# mount como root e o Postgres (UID do host) nao consegue criar o PGDATA.
 up:
+	mkdir -p volume/data/psql volume/data/system_temp
 	docker compose up -d --wait --wait-timeout 600
 
 # Só PostgreSQL, license e dbAccess.

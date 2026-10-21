@@ -1,11 +1,11 @@
 export HOST_UID := $(shell id -u)
 export HOST_GID := $(shell id -g)
 
-NATIVE := ./native/protheus-colima.sh
-
-.PHONY: up deps down restart logs ps status up-container down-container logs-container up-native down-native native-install native-uninstall
+.PHONY: up deps down restart logs status ps
 
 # PostgreSQL, license, dbAccess e AppServer no Docker.
+# mkdir antes do compose: se o diretorio nao existir, o daemon cria o bind
+# mount como root e o Postgres (UID do host) nao consegue criar o PGDATA.
 up:
 	mkdir -p volume/data/psql volume/data/system_temp
 	docker compose up -d --wait --wait-timeout 600
@@ -28,23 +28,3 @@ status:
 
 ps:
 	docker compose ps
-
-up-container: up
-
-down-container: down
-
-logs-container: logs
-
-# AppServer direto na VM do Colima. As portas coincidem com o container.
-up-native: deps
-	-docker compose stop protheus
-	$(NATIVE) start
-
-down-native:
-	$(NATIVE) stop
-
-native-install:
-	$(NATIVE) install
-
-native-uninstall:
-	$(NATIVE) uninstall

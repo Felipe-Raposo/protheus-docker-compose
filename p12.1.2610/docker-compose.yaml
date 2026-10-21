@@ -7,18 +7,18 @@ services:
         env_file:
           - .env
         environment:
-            # O entrypoint da imagem troca para esse UID/GID via gosu. Nao usar "user:"
-            # aqui: o daemon tentaria chown no bind mount, o que o Colima nao permite.
+            # O entrypoint da imagem troca para esse UID/GID via gosu. Não usar "user:"
+            # aqui: o daemon tentaria chown no bind mount, o que o Colima não permite.
             - HOST_UID=${HOST_UID:-501}
             - HOST_GID=${HOST_GID:-20}
             # O fsync final do initdb trava no virtiofs do Colima.
             - POSTGRES_INITDB_ARGS=--no-sync
         tmpfs:
-            # Socket Unix gravavel pelo UID do host (o diretorio da imagem e do postgres).
+            # Socket Unix gravável pelo UID do host (o diretório da imagem e do postgres).
             - /var/run/postgresql:rw,noexec,nosuid,size=16m
         volumes:
             # PG 18 usa PGDATA em /var/lib/postgresql/18/docker. Rodando com o UID do
-            # host, o entrypoint oficial nao tenta chown, que falha no bind mount do Colima.
+            # host, o entrypoint oficial não tenta chown, que falha no bind mount do Colima.
             - ./volume/data/psql:/var/lib/postgresql:z
         networks:
             - protheus
@@ -39,8 +39,6 @@ services:
         platform: linux/amd64
         ports:
             - "8081:1234"
-            # Usada pelo AppServer nativo na VM do Colima (native/protheus-colima.sh).
-            - "5555:5555"
         devices:
             - "/dev/mem:/dev/mem"
         cap_add:
@@ -104,16 +102,12 @@ services:
         platform: linux/amd64
         ports:
             - "1234:1234"
-            # SmartClient TCP. A 1234 fica com o WebApp porque o multiprotocolo
-            # esta desligado no appserver.ini (o MPP derruba o AppServer 26.3).
-            - "1235:1235"
             - "8080:8080"
-            - "9995:9995"
+            - "32033:32033"
         environment:
             - APPSERVER_DATABASE=POSTGRES
         volumes:
             - ./volume/data/system_temp:/protheus12/protheus_data/system_temp
-            - ./appserver.ini:/protheus12/bin/appserver/appserver.ini
         devices:
             - "/dev/mem:/dev/mem"
         cap_add:
@@ -134,22 +128,22 @@ services:
             - protheus
         restart: always
         healthcheck:
-            # Sem MPP o WebApp responde em / na 1234. O lock leva o numero da porta TCP
-            # (1235) e so passa a contar depois que o processo permanece no ar.
+            # Com o MPP ligado, WebApp e SmartClient compartilham a 1234.
+            # O lock leva o número da porta TCP e só passa a contar depois
+            # que o processo permanece no ar.
             test:
                 - CMD
                 - bash
                 - -c
                 - >-
-                  lck=/protheus12/bin/appserver/startstop_1235.lck;
+                  lck=/protheus12/bin/appserver/startstop_1234.lck;
                   [ -f "$$lck" ] &&
-                  [ $$(( $$(date +%s) - $$(stat -c %Y "$$lck") )) -ge 60 ] &&
-                  curl -sf -o /dev/null -m 5 http://localhost:1234/
+                  [ $$(( $$(date +%s) - $$(stat -c %Y "$$lck") )) -ge 10 ] &&
+                  curl -sf -o /dev/null -m 5 http://localhost:1234/webapp/
             interval: 10s
             timeout: 5s
             retries: 5
-            # O AppServer extrai o systemload antes de abrir a porta (~2,5 min no Colima).
-            start_period: 180s
+            start_period: 90s
         depends_on:
             dbaccess:
                 condition: service_healthy

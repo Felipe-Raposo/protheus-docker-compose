@@ -126,19 +126,11 @@ docker compose up -d
 
 - **PostgreSQL:** fica `healthy` só depois que o banco do Protheus foi criado/reconciliado.
 - **License Server e dbAccess:** porta TCP aberta (5555 e 7890).
-- **AppServer:** o WebApp responde na 1234 mesmo quando o MPP falha, e o AppServer cai uns 20 s depois. Por isso o check exige que o `startstop_1234.lck` tenha pelo menos 60 s, além da resposta em `/webapp/`. O `start_period` é de 180 s, porque a extração da systemload no primeiro start leva cerca de 2,5 min no Colima.
+- **AppServer:** com o multiprotocolo ligado, o WebApp responde em `/webapp/` na 1234. O check exige que o `startstop_1234.lck` tenha pelo menos 60 s, além dessa resposta. O `start_period` é de 180 s, porque a extração da systemload no primeiro start leva cerca de 2,5 min no Colima.
 
 ## Problemas conhecidos
 
-- **12.1.2610, erro `-107`:** o AppServer 26.3.0.0 (build `7.00.260324P-20261015`) encerra logo após o start, tanto em container quanto nativo:
-
-```
-HTTP Server - Error, Thread Pool: 'MAIN|SD|HTTP' - Slaves must have value.
-Error on exec Rest Server function. Error: (-107 | C | /app-root)
-*** FAILED TO START MPP APPLICATION SERVER ***
-```
-
-O erro acontece mesmo com um INI mínimo. Os próximos passos são testar o RPO 2610 com o AppServer da `base-24` ou abrir chamado na TOTVS.
+- **12.1.2610, multiprotocolo:** o AppServer 26.3.0.0, com `NewRestOnInit` no padrão, sobe o job `MPPORT_REST_INIT` e encerra o processo no pool `MAIN|SD|HTTP` sem `Slaves` (`Invalid REST Port`, erro -107). O `appserver.ini` da base 26 desliga esse job (`[MPP_CLima]` `NewRestOnInit=0`) e entrega a porta do `[HTTPSERVER]` (`NewRestOnStart=1`): servidor na 9995, `Path=/app-root`, `RootPath` em `/protheus12/protheus_data/http-root/app-root` e um pool cujo `Slaves` aponta para outra seção (`Environment=P12`, `MinThreads=1`). O `protheus.sh` cria esse diretório antes do start. O broker escuta na porta TCP 1234; o socket do `[WebApp]` fica na 1236 para não disputar esse bind (`Address already in use`). O endereço público continua `http://localhost:1234/webapp/`. `MultiProtocolPort` permanece ligado.
 
 ## Imagens
 
