@@ -4,37 +4,40 @@ Ambientes de desenvolvimento do **TOTVS Protheus 12** com Docker Compose, montad
 
 ## Descrição
 
-Cada pasta é uma stack independente:
+Cada pasta é uma stack independente. As duas usam os mesmos nomes de container (`postgresql`, `license-server`, `dbaccess`, `protheus`) e as mesmas portas. Suba uma de cada vez.
 
 | Pasta | Ambiente | Serviços |
 |---|---|---|
-| `p12.1.2610/` | Protheus 12.1.2610 (AppServer 26.3.0.0) | PostgreSQL 18, License Server, dbAccess 26, AppServer |
-| `p12.1.2510/` | Protheus 12.1.2510 (AppServer 24.x) | PostgreSQL 16, License Server, dbAccess 24, AppServer |
-| `compiler/` | Compilador de fontes/patches (AppServer 24.x) | Compiler |
+| `p12.1.2610/` | Protheus 12.1.2610 (AppServer 26.x — Arara Azul) | PostgreSQL 18, License Server, dbAccess 26, AppServer |
+| `p12.1.2510/` | Protheus 12.1.2510 (AppServer 24.x — Onça Preta) | PostgreSQL 18, License Server, dbAccess 26, AppServer |
 
-As stacks `p12.1.2610` e `p12.1.2510` usam os mesmos nomes de container e as mesmas portas. Suba uma de cada vez.
+As duas stacks usam `feliperaposo/protheus-dbaccess:26`. O AppServer recebe `APPSERVER_DATABASE=POSTGRES`.
 
 ### Portas
 
 | Porta | Serviço |
 |---|---|
 | 1234 | AppServer: SmartClient, WebApp (`/webapp`) e TDS |
-| 8080 | AppServer: REST (`/api`) |
-| 9995 | AppServer: HTTP Server (`/rest`) |
+| 8080 | AppServer: REST (`/rest`) |
+| 32033 | AppServer: App Monitor (`/app-monitor`) |
 | 7890 | dbAccess |
 | 5432 | PostgreSQL |
 | 8081 | License Server Monitor (WebApp) |
-| 5555 | License Server (publicada só na 2610, para o AppServer nativo) |
+
+Na rede do Compose, o License Server escuta na 5555 e o dbAccess publica o `dbapi.so` na 7891. Essas portas ficam entre os containers.
+
+No 12.1.2610 o socket TCP do AppServer é a 1235; a 1234 publicada é o proxy do multiprotocolo, que também atende `/webapp/`. No 12.1.2510 o TCP e o multiprotocolo compartilham a 1234.
 
 ## Pré-requisitos
 
-- Docker com Compose v2. No macOS (Apple Silicon), Colima com `vmType: vz` e Rosetta habilitado, já que as imagens do Protheus são `linux/amd64`:
+- Docker com Compose v2.
+- `make`.
+
+As imagens do Protheus, do License Server e do dbAccess são `linux/amd64`. No macOS com Apple Silicon, execute-as com emulação. No Colima:
 
 ```bash
 colima start --vm-type vz --vz-rosetta --memory 4 --cpu 2
 ```
-
-- `make`, para a stack 2610.
 
 ## Configuração
 
@@ -51,86 +54,39 @@ POSTGRES_PASSWORD=Protheus12!
 # PROTHEUS_PASSWORD=protheus
 ```
 
-Na 2610, o `.env` também traz `HOST_UID`/`HOST_GID`. O `Makefile` exporta os valores de `id -u` e `id -g`, e o PostgreSQL roda com esse usuário para o bind mount funcionar no Colima sem `chown`.
+O `Makefile` exporta `HOST_UID` e `HOST_GID` com `id -u` e `id -g`. O PostgreSQL roda com esse usuário, via `gosu` no entrypoint da imagem, para gravar no bind mount. Na 2610 o `.env` também define esses valores; com `make`, vale o usuário atual.
 
 Os dados ficam em `volume/` de cada stack (fora do Git):
 
-- `volume/data/psql`: dados do PostgreSQL
+- `volume/data/psql`: dados do PostgreSQL 18 (`PGDATA` em `/var/lib/postgresql/18/docker`)
 - `volume/data/system_temp`: arquivos temporários do AppServer
-- `compiler/volume/apo` e `compiler/volume/patches`: RPO e patches do compilador
+
+O `make up` cria esses diretórios antes do Compose. Se o daemon criar o bind mount, ele fica com dono root e o PostgreSQL não consegue iniciar o `PGDATA`.
 
 ## Uso
 
-### Protheus 12.1.2610
-
-Por padrão, o AppServer roda **fora do Docker**, como processo na VM do Colima. PostgreSQL, License Server e dbAccess continuam em containers.
+Os alvos são os mesmos nas duas stacks:
 
 ```bash
-cd p12.1.2610
+cd p12.1.2610   # ou p12.1.2510
 
-make up        # sobe db, license e dbaccess e depois o AppServer nativo
-make status    # estado do AppServer nativo
-make logs      # log do AppServer nativo
-make ps        # containers da stack
-make down      # para o AppServer nativo e derruba os containers
+make up         # sobe PostgreSQL, License Server, dbAccess e AppServer
+make deps       # só PostgreSQL, License Server e dbAccess
+make status     # estado dos containers
+make ps         # o mesmo que status
+make logs       # logs da stack
+make restart    # down e up
+make down       # derruba os containers
 ```
 
-Para rodar o AppServer em container, como nas versões anteriores:
-
-```bash
-make up-container
-make logs-container
-make down-container
-```
-
-Só para as dependências, sem o AppServer:
-
-```bash
-make deps
-```
-
-#### AppServer nativo no Colima
-
-O script [`p12.1.2610/native/protheus-colima.sh`](p12.1.2610/native/protheus-colima.sh) roda no Mac e se reexecuta dentro da VM com `sudo`:
-
-- extrai a imagem `feliperaposo/protheus:p12.1.2610` uma vez para `/mnt/lima-colima/protheus/p12.1.2610/rootfs`, no disco de dados da VM (`install`)
-- executa `/protheus.sh` num `chroot` desse rootfs, com o binário x86-64 rodando pelo Rosetta
-- aplica os ulimits da TOTVS (`nofile` 65536, `core` ilimitado e `stack` de 1 MB)
-- resolve `license-server` e `dbaccess` para `127.0.0.1`, usando as portas 5555 e 7890 publicadas pelos containers
-- aguarda o AppServer ficar de pé por 60 s e responder em `/webapp/` (`START_TIMEOUT`, padrão 600 s)
-
-```bash
-./native/protheus-colima.sh install|start|stop|restart|status|logs|uninstall
-```
-
-O log fica em `/mnt/lima-colima/protheus/p12.1.2610/appserver.log`, dentro da VM.
-
-### Protheus 12.1.2510
-
-```bash
-cd p12.1.2510
-mkdir -p volume/data/psql volume/data/system_temp
-docker compose up -d --wait --wait-timeout 600
-docker compose logs -f
-docker compose down
-```
-
-### Compiler
-
-```bash
-cd compiler
-docker compose up -d
-```
+`make up` e `make deps` usam `docker compose up -d --wait --wait-timeout 600`.
 
 ## Healthchecks
 
-- **PostgreSQL:** fica `healthy` só depois que o banco do Protheus foi criado/reconciliado.
-- **License Server e dbAccess:** porta TCP aberta (5555, e 7890 junto com 7891 no dbAccess).
-- **AppServer:** com o multiprotocolo ligado, o WebApp responde em `/webapp/` na 1234. O check exige que o `startstop_1234.lck` tenha pelo menos 60 s, além dessa resposta. O `start_period` é de 180 s, porque a extração da systemload no primeiro start leva cerca de 2,5 min no Colima.
-
-## Problemas conhecidos
-
-- **12.1.2610, multiprotocolo:** o AppServer 26.3.0.0, com `NewRestOnInit` no padrão, sobe o job `MPPORT_REST_INIT` e encerra o processo no pool `MAIN|SD|HTTP` sem `Slaves` (`Invalid REST Port`, erro -107). O `appserver.ini` da base 26 desliga esse job (`[MPP_CLima]` `NewRestOnInit=0`) e entrega a porta do `[HTTPSERVER]` (`NewRestOnStart=1`): servidor na 9995, `Path=/app-root`, `RootPath` em `/protheus12/protheus_data/http-root/app-root` e um pool cujo `Slaves` aponta para outra seção (`Environment=P12`, `MinThreads=1`). O `protheus.sh` cria esse diretório antes do start. O broker escuta na porta TCP 1234; o socket do `[WebApp]` fica na 1236 para não disputar esse bind (`Address already in use`). O endereço público continua `http://localhost:1234/webapp/`. `MultiProtocolPort` permanece ligado.
+- **PostgreSQL:** fica `healthy` só depois que o banco do Protheus foi criado ou reconciliado. O `start_period` é de 40 s.
+- **License Server:** porta TCP 5555 aberta. O `start_period` é de 40 s.
+- **dbAccess:** portas TCP 7890 e 7891 abertas. O `start_period` é de 30 s. Sobe depois do PostgreSQL e do License Server.
+- **AppServer:** `curl` em `http://localhost:1234/webapp/` e o lock de start com pelo menos 10 s. No 12.1.2610 o lock é `startstop_1235.lck`, com fallback para `startstop_1234.lck`. No 12.1.2510 é `startstop_1234.lck`. O `start_period` é de 90 s. Sobe depois do dbAccess.
 
 ## Imagens
 
@@ -138,15 +94,9 @@ docker compose up -d
 |---|---|
 | `feliperaposo/protheus:p12.1.2610` | [protheus-docker-12.1.2610](https://github.com/Felipe-Raposo/protheus-docker-12.1.2610) |
 | `feliperaposo/protheus:p12.1.2510` | [protheus-docker-12.1.2510](https://github.com/Felipe-Raposo/protheus-docker-12.1.2510) |
-| `feliperaposo/protheus-docker-base:26` | [protheus-docker-base-26](https://github.com/Felipe-Raposo/protheus-docker-base-26) |
-| `feliperaposo/protheus-docker-base:24` | [protheus-docker-base-24](https://github.com/Felipe-Raposo/protheus-docker-base-24) |
-| `feliperaposo/protheus-docker-baselight:26` | [protheus-docker-baselight-26](https://github.com/Felipe-Raposo/protheus-docker-baselight-26) |
-| `feliperaposo/protheus-docker-baselight:24` | [protheus-docker-baselight-24](https://github.com/Felipe-Raposo/protheus-docker-baselight-24) |
 | `feliperaposo/protheus-dbaccess:26` | [protheus-docker-dbaccess-26](https://github.com/Felipe-Raposo/protheus-docker-dbaccess-26) |
-| `feliperaposo/protheus-dbaccess:24` | [protheus-docker-dbaccess-24](https://github.com/Felipe-Raposo/protheus-docker-dbaccess-24) |
-| `feliperaposo/protheus-license` | [protheus-docker-license](https://github.com/Felipe-Raposo/protheus-docker-license) |
-| `feliperaposo/protheus-postgresql` | [protheus-docker-postgresql](https://github.com/Felipe-Raposo/protheus-docker-postgresql) |
-| `feliperaposo/protheus-compiler:24` | [protheus-docker-compiler](https://github.com/Felipe-Raposo/protheus-docker-compiler) |
+| `feliperaposo/protheus-license:latest` | [protheus-docker-license](https://github.com/Felipe-Raposo/protheus-docker-license) |
+| `feliperaposo/protheus-postgresql:18` | [protheus-docker-postgresql](https://github.com/Felipe-Raposo/protheus-docker-postgresql) |
 
 ## Licença
 

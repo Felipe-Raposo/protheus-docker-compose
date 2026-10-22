@@ -39,10 +39,14 @@ services:
         platform: linux/amd64
         ports:
             - "8081:1234"
-        devices:
-            - "/dev/mem:/dev/mem"
-        cap_add:
-            - sys_rawio
+        security_opt:
+            # dmidecode 3.6 lê /sys/firmware/dmi/tables. Um bind nesse caminho
+            # não fica visível: o runtime monta um tmpfs vazio em /sys/firmware
+            # depois dos volumes, e o perfil docker-default contém
+            # "deny /sys/firmware/** rwklx". /dev/mem segue bloqueado pelo
+            # lockdown do Secure Boot, então o fallback também falha.
+            - systempaths=unconfined
+            - apparmor=unconfined
         ulimits:
             core:
                 soft: -1
@@ -108,10 +112,14 @@ services:
             - APPSERVER_DATABASE=POSTGRES
         volumes:
             - ./volume/data/system_temp:/protheus12/protheus_data/system_temp
-        devices:
-            - "/dev/mem:/dev/mem"
-        cap_add:
-            - sys_rawio
+        security_opt:
+            # dmidecode 3.6 lê /sys/firmware/dmi/tables. Um bind nesse caminho
+            # não fica visível: o runtime monta um tmpfs vazio em /sys/firmware
+            # depois dos volumes, e o perfil docker-default contém
+            # "deny /sys/firmware/** rwklx". /dev/mem segue bloqueado pelo
+            # lockdown do Secure Boot, então o fallback também falha.
+            - systempaths=unconfined
+            - apparmor=unconfined
         ulimits:
             # ulimits definido de acordo com documentação da TOTVS
             # https://tdn.totvs.com/display/tec/Application+Server+-+ulimit+settings
