@@ -86,7 +86,7 @@ services:
             - protheus
         restart: always
         healthcheck:
-            test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/7890"]
+            test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/7890 && echo > /dev/tcp/localhost/7891"]
             interval: 10s
             timeout: 5s
             retries: 5

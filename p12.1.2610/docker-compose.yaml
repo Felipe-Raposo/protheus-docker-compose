@@ -86,7 +86,7 @@ services:
             - protheus
         restart: always
         healthcheck:
-            test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/7890"]
+            test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/7890 && echo > /dev/tcp/localhost/7891"]
             interval: 10s
             timeout: 5s
             retries: 5
@@ -128,15 +128,15 @@ services:
             - protheus
         restart: always
         healthcheck:
-            # Com o MPP ligado, WebApp e SmartClient compartilham a 1234.
-            # O lock leva o número da porta TCP e só passa a contar depois
-            # que o processo permanece no ar.
+            # O AppServer escuta na 1235. A 1234 é o proxy, que também
+            # atende /webapp. O lock leva o número da porta TCP.
             test:
                 - CMD
                 - bash
                 - -c
                 - >-
-                  lck=/protheus12/bin/appserver/startstop_1234.lck;
+                  lck=/protheus12/bin/appserver/startstop_1235.lck;
+                  [ -f "$$lck" ] || lck=/protheus12/bin/appserver/startstop_1234.lck;
                   [ -f "$$lck" ] &&
                   [ $$(( $$(date +%s) - $$(stat -c %Y "$$lck") )) -ge 10 ] &&
                   curl -sf -o /dev/null -m 5 http://localhost:1234/webapp/

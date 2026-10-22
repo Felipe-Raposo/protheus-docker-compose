@@ -125,7 +125,7 @@ docker compose up -d
 ## Healthchecks
 
 - **PostgreSQL:** fica `healthy` só depois que o banco do Protheus foi criado/reconciliado.
-- **License Server e dbAccess:** porta TCP aberta (5555 e 7890).
+- **License Server e dbAccess:** porta TCP aberta (5555, e 7890 junto com 7891 no dbAccess).
 - **AppServer:** com o multiprotocolo ligado, o WebApp responde em `/webapp/` na 1234. O check exige que o `startstop_1234.lck` tenha pelo menos 60 s, além dessa resposta. O `start_period` é de 180 s, porque a extração da systemload no primeiro start leva cerca de 2,5 min no Colima.
 
 ## Problemas conhecidos
