@@ -47,6 +47,10 @@ services:
             # lockdown do Secure Boot, então o fallback também falha.
             - systempaths=unconfined
             - apparmor=unconfined
+        devices:
+            - "/dev/mem:/dev/mem"
+        cap_add:
+            - sys_rawio
         ulimits:
             core:
                 soft: -1
@@ -120,6 +124,10 @@ services:
             # lockdown do Secure Boot, então o fallback também falha.
             - systempaths=unconfined
             - apparmor=unconfined
+        devices:
+            - "/dev/mem:/dev/mem"
+        cap_add:
+            - sys_rawio
         ulimits:
             # ulimits definido de acordo com documentação da TOTVS
             # https://tdn.totvs.com/display/tec/Application+Server+-+ulimit+settings
